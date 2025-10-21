@@ -1,12 +1,49 @@
 import express from "express";
 import fs from "fs";
 import path from "path";
+import { createProxyMiddleware } from "http-proxy-middleware";
 
 const app = express();
 const PORT = 8080;
 
 // Pfad zu lokalem Nextcloud-Verzeichnis
 const baseDir = "/home/josias/Documents/kiosk";
+
+// Proxy für HSF-Website
+app.use(
+	"/hsf", createProxyMiddleware({
+		target: "https://www.hsf-ev.de/",
+		changeOrigin: true,
+		secure: true,
+		onProxyRes: (proxyRes, req, res) => {
+			delete proxyRes.headers['content-security-policy'];
+			delete proxyRes.headers['x-frame-options'];
+			delete proxyRes.headers['x-content-security-policy'];
+			delete proxyRes.headers['x-webkit-csp'];
+		},
+		onError: (err, req, res) => {
+			res.status(500).send("Proxy-Fehler: " + err.message);
+		}
+	})
+);
+
+// Proxy für Netzmap
+app.use(
+	"/netzmap", createProxyMiddleware({
+		target: "https://halle.netzmap.com/app",
+		changeOrigin: true,
+		secure: true,
+		onProxyRes: (proxyRes, req, res) => {
+			delete proxyRes.headers['content-security-policy'];
+			delete proxyRes.headers['x-frame-options'];
+			delete proxyRes.headers['x-content-security-policy'];
+			delete proxyRes.headers['x-webkit-csp'];
+		},
+		onError: (err, req, res) => {
+			res.status(500).send("Proxy-Fehler: " + err.message);
+		}
+	})
+);
 
 // Statische Dateien (PDFs, Bilder)
 app.use("/docs", express.static(baseDir));
@@ -74,6 +111,10 @@ app.get("/api/files", (req, res) => {
 	} else {
 		// Scan all directories from template.json
 		result = templateData.map((entry) => {
+
+			// For embedded content without files
+			if (!entry.directory) return { display_name: entry.display_name };
+
 			const catDir = path.join(baseDir, entry.directory);
 			let files = [];
 			if (fs.existsSync(catDir)) {
